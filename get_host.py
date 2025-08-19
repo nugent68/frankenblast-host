@@ -286,11 +286,9 @@ def run_prost(transient, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     
     # Save the host associations to a CSV file
-    #now = datetime.now()
-    #date_str = f"{now.year}{now.month:02d}{now.day:02d}"
-    #output_csv = os.path.join(output_dir, f"hosts_{date_str}.csv")
-
-    output_csv = os.path.join(output_dir, "SLSN_most_host_hosts.csv")
+    now = datetime.now()
+    date_str = f"{now.year}{now.month:02d}{now.day:02d}"
+    output_csv = os.path.join(output_dir, f"hosts_{date_str}.csv")
     
     if os.path.exists(output_csv):
         with open(output_csv, "a", newline='') as f:
