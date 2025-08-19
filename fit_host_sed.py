@@ -81,7 +81,6 @@ def run_training_set(fname, verbose=True):
     if verbose:
         print("""Training sets loaded.""") 
 
-    print(len(y_train_global))
 
     return hatp_x_y_global, y_train_global, x_train_global
 
