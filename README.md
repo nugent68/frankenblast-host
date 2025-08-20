@@ -7,7 +7,7 @@ For installation:
   - requirements.txt has the exact conda environment setup needed for FrankenBlast
   - settings.sh has some CUSTOM path files you need to put in your .zshrc or .bashrc or .bash_profile file
   - FrankenBlast currently uses Python 3.10.15
-  - Make sure you install: numpy, scipy, astro-prospector, python-fsps, sedpy, astro-prost, astroquery, corner, dustmaps, extinction, jupyter, pandas, sbi, seaborn, tensorflow, and matplotlib
+  - Make sure you install: numpy, scipy, astro-prospector, python-fsps (and FSPS), sedpy, astro-prost, astroquery, corner, dustmaps, extinction, jupyter, pandas, sbi, seaborn, tensorflow, and matplotlib
 
 CURRENT ISSUES:
 
