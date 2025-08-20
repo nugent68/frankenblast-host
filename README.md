@@ -1,7 +1,7 @@
 # frankenblast-host
 Code for rapid transient host association, photometry, and stellar population modeling
 
-If using FrankenBlast, please cite Nugent et al. 2025.
+If using FrankenBlast, please cite Nugent et al. 2025. FrankenBlast is a customized version of the Blast web application (https://blast.scimma.org/), so we suggest you also cite Jones et al. 2024 (https://ui.adsabs.harvard.edu/abs/2024arXiv241017322J/abstract).
 
 For installation: 
   - requirements.txt has the exact conda environment setup needed for FrankenBlast
