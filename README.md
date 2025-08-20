@@ -12,6 +12,7 @@ For installation:
 
 The SBI++ trained models for the host SED fit are too large for GitHub, please go to [INSERT ZENODO LINK] to download sbipp_phot.zip and sbi_training_sets.zip. Move these files to the ./data/ directory and unzip. 
 
+FrankenBlast Tutorial.ipynb contains a tutorial for how to use FrankenBlast. We have also included files to do SBI++ host SED fitting with LSST data. A tutorial will be added soon.
 
 CURRENT ISSUES:
 
