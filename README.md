@@ -10,7 +10,7 @@ For installation:
   - Make sure you install: numpy, scipy, astro-prospector, python-fsps (and FSPS), sedpy, astro-prost, astroquery, corner, dustmaps, extinction, jupyter, pandas, sbi, seaborn, tensorflow, and matplotlib
  
 
-The SBI++ trained models for the host SED fit are too large for GitHub, please go to [INSERT ZENODO LINK] to download sbipp_phot.zip, sbi_training_sets.zip, and SBI_models.zip. Move sbipp_phot.zip and sbi_training_sets.zip files to the ./data/ directory and unzip. Unzip SBI_models.zip and move all files to ./data/SBI/.
+The SBI++ trained models for the host SED fit are too large for GitHub, please go to [INSERT ZENODO LINK] to download sbipp_phot.zip and sbi_training_sets.zip. Move these files to the ./data/ directory and unzip. 
 
 
 CURRENT ISSUES:
