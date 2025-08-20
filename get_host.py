@@ -10,21 +10,21 @@ import seaborn as sns
 from astropy.cosmology import WMAP9 as cosmo
 from astropy.coordinates import SkyCoord
 import astropy.units as u
-
+from collections import OrderedDict
 from classes import Transient as BlastTransient
 from classes import Filter, Host
 from mwebv_host import get_mwebv
 from get_host_images import download_and_save_cutouts, survey_list, get_cutouts
 from create_apertures import construct_aperture
 from do_photometry import do_global_photometry
-
+from colorama import Fore, Style
 import csv
 import shutil
 import glob
 
 from astro_prost.diagnose import plot_match
-from astro_prost.helpers import GalaxyCatalog, Transient
-from astro_prost.helpers import PriorzObservedTransients, SnRateAbsmag
+from astro_prost.helpers import GalaxyCatalog, Transient, setup_logger, sanitize_input
+from astro_prost.associate import log_host_properties, chunks, get_catalogs
 
 import pathlib
 from mpire import WorkerPool
@@ -35,275 +35,281 @@ import numpy as np
 import requests
 import importlib.resources as pkg_resources
 import importlib
+import warnings
 
+NPROCESS_MAX = np.maximum(os.cpu_count() - 4, 1)
+
+MAX_RETRIES = 3
+
+
+PROST_ROOT = os.environ.get("PROST_PATH")
+
+
+DEFAULT_RELEASES = {
+    "glade": "latest",
+    "decals": "dr9",
+    "panstarrs": "dr2",
+    "skymapper": "dr4",
+    "rubin": "dp0.2"
+}
+
+
+ONLY_OFFSET_CATS = {"skymapper", "rubin"}
+
+# Filter unnecessary warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning, message="divide by zero encountered in divide")
 
 
 def ProstSingleTransient(
     SN_obj,
+    glade_catalog,
     n_samples,
-    verbose,
     priors,
     likes,
     cosmo,
     catalogs,
+    verbose=0,
+    strict_checking=False,
+    warn_on_fallback=True,
+    plot_match=False,
 ):
     """Associates a transient with its most likely host galaxy.
 
     Parameters
     ----------
-    blast_obj: FrankenBlast transient class instantiation
+    SN_obj: FrankenBlast transient class instantiation
+    glade_catalog : pandas.DataFrame
+        GLADE catalog of galaxies, with sizes and photo-zs.
     n_samples : int
-        Number of samples for the monte-carlo sampling of associations.
-    verbose : int
-        Level of logging during run (can be 0, 1, or 2).
-
-    priors: Dictionary of priors
-        z : scipy stats continuous distribution
-            Prior distribution on redshift. This class can be user-defined
-            but needs .sample(size=n) and .pdf(x) functions.
-        offset : scipy stats continuous distribution
-            Prior distribution on fractional offset.
-        absmag : scipy stats continuous distribution
-            Prior distribution on host absolute magnitude.
-    likes: 
-        offset : scipy stats continuous distribution
-            Likelihood distribution on fractional offset.
-        absmag : scipy stats continuous distribution.
-            Likelihood distribution on host absolute magnitude.
-    cosmo : astropy cosmology
+        Number of samples for the Monte Carlo sampling of associations.
+    priors : dict
+        Dictionary of priors for the run (at least one of redshift, offset, absolute magnitude).!
+    likes : dict
+        Dictionary of likelihoods for the run (at least one of offset, absolute magnitude).
+    cosmo : astropy.cosmology
         Assumed cosmology for the run (defaults to LambdaCDM if unspecified).
-    catalogs : list
-        List of source catalogs to query (can include 'glade', 'decals', or 'panstarrs').
-    cat_cols : boolean
-        If true, concatenates the source catalog fields to the returned dataframe.
+    catalogs : dict
+        Dict of source catalogs to query, with required key "name" and optional key "release".
+    log_fn : str, optional
+        The fn associated with the logger.Logger object.
+    verbose : int
+        The verbosity level of the output.
+    strict_checking : boolean, optional
+        If true, raises error if catalog doesn't support conditioning on a property requested.
+    warn_on_fallback : boolean, optional
+        If true, raises warning if catalog doesn't support conditioning on a property requested. 
+    plot_match : boolean, optional
+        If true, attempts to generate a plot image.
+
     Returns
     -------
     tuple
-        Properties of the best host galaxy
+        Properties of the first and second-best host galaxy matches, and
+        a dictionary of catalog columns (empty if cat_cols=False)
+
     """
+
+    logger = setup_logger()
+    calc_host_props = list(priors.keys())
+    condition_host_props = list(priors.keys())
+    unsupported_props = {"redshift", "absmag"}.intersection(priors)
+    unsupported_catalogs  = ONLY_OFFSET_CATS.intersection(catalogs)
+
+    if unsupported_props and unsupported_catalogs:
+        msg = (
+            f"{', '.join(sorted(unsupported_catalogs))} "
+            f"{'does not support conditioning on' if len(unsupported_catalogs)==1 else 'do not support conditioning on'} "
+            f"{', '.join(sorted(unsupported_props))}; falling back to 'offset' only for this subset."
+        )
+
+        if strict_checking:
+            raise ValueError(
+                msg + "\n\nInterested in contributing a photo-z estimator? "
+                      "Open an issue at https://github.com/alexandergagliano/Prost/issues."
+            )
+
+        if warn_on_fallback:
+            logger.warning(msg)
+
+
     try:
         transient = Transient(
             name=SN_obj.name,
             position=SN_obj.coordinates,
             redshift=SN_obj.transient_redshift,
             n_samples=n_samples,
+            logger=logger
         )
-        no_redshift_fit = False
     except (KeyError, TypeError, AttributeError):
         transient = Transient(
             name=SN_obj.name,
             position=SN_obj.coordinates,
             n_samples=n_samples,
-        )
-        no_redshift_fit = True
-
-    if verbose > 0:
-        print(
-            f"Associating {transient.name} at RA, DEC = "
-            f"{transient.position.ra.deg:.6f}, {transient.position.dec.deg:.6f}"
+            logger=logger
         )
 
-    
-    transient.set_prior("redshift", priors["z"])
-    transient.set_prior("offset", priors["offset"])
-    transient.set_prior("absmag", priors["absmag"])
-
-    transient.set_likelihood("offset", likes["offset"])
-    transient.set_likelihood("absmag", likes["absmag"])
-
-    transient.gen_z_samples(n_samples=n_samples)
-
-    (
-        SN_name, best_prob, best_ra, best_dec, best_zred, best_zred_std,best_cat,
-        smallcone_prob, missedcat_prob, bayes_factor
-    ) = (
-        np.nan,
-        np.nan,
-        np.nan,
-        np.nan,
-        np.nan,
-        np.nan,
-        np.nan,
-        np.nan,
-        np.nan,
-        np.nan,
+    logger.info(
+        f"\n\nAssociating {transient.name} at RA, DEC = "
+        f"{transient.position.ra.deg:.6f}, {transient.position.dec.deg:.6f} (redshift {transient.redshift:.3f})"
     )
 
-    best_cat = ""
+    for key, val in priors.items():
+        transient.set_prior(key, val)
 
-    best_host_all_cat = []
+    for key, val in likes.items():
+        transient.set_likelihood(key, val)
 
-    for cat_name in catalogs:
-        glade_catalog = pd.read_csv('./data/prost_data/GLADE+_HyperLedaSizes_mod_withz.csv')
-        
-        cat = GalaxyCatalog(name=cat_name, n_samples=n_samples, data=glade_catalog)
+    if 'redshift' in priors.keys():
+        transient.gen_z_samples(n_samples=n_samples)
+
+    # Define result fields and initialize all values
+    result = {
+        "name": transient.name,
+        "host_ra": None,
+        "host_dec": None,
+        "host_redshift_mean": np.nan,
+        "host_redshift_std": np.nan,
+        "host_prob": np.nan,
+        "smallcone_posterior": np.nan,
+        "missedcat_posterior": np.nan,
+        "best_cat": np.nan,
+    }
+
+    # Define the fields that we extract for best and second-best hosts
+    catalog_dict = OrderedDict(get_catalogs(catalogs))
+
+    for cat_name, cat_release in catalog_dict.items():
+        if cat_name in ONLY_OFFSET_CATS:
+            condition_host_props_cat = ['offset']
+        else:
+            condition_host_props_cat = condition_host_props
+
+        cat = GalaxyCatalog(name=cat_name, n_samples=n_samples, data=glade_catalog, release=cat_release)
 
         try:
-            cat.get_candidates(transient, time_query=True, verbose=verbose, cosmo=cosmo)
+            cat.get_candidates(transient, time_query=True, logger=logger, cosmo=cosmo)
         except requests.exceptions.HTTPError:
-            print(f"Candidate retrieval failed for {transient.name} in catalog {cat_name}.")
+            logger.warning(f"Candidate retrieval failed for {transient.name} in catalog {cat_name} due to an HTTPError.")
             continue
 
         if cat.ngals > 0:
-            cat = transient.associate(cat, cosmo, no_redshift_fit=no_redshift_fit, verbose=verbose)
+            cat = transient.associate(cat, cosmo, condition_host_props=condition_host_props_cat)
 
             if transient.best_host != -1:
                 best_idx = transient.best_host
                 second_best_idx = transient.second_best_host
 
-                if verbose >= 2:
-                    print_cols = [
-                        "objID",
-                        "z_prob",
-                        "offset_prob",
-                        "absmag_prob",
-                        "total_prob",
-                        "ra",
-                        "dec",
-                        "offset_arcsec",
-                        "z_best_mean",
-                        "z_best_std",
-                    ]
-                    print("Properties of best host:")
-                    for key in print_cols:
-                        print(key)
-                        print(cat.galaxies[key][best_idx])
+                print_props = ['name', 'ra', 'dec', 'total_posterior']
+                condition_props = list(priors.keys())
 
-                    print("Properties of second best host:")
-                    for key in print_cols:
-                        print(key)
-                        print(cat.galaxies[key][second_best_idx])
-
-                best_objid = np.int64(cat.galaxies["objID"][best_idx])
-                best_prob = cat.galaxies["total_prob"][best_idx]
-                best_ra = cat.galaxies["ra"][best_idx]
-                best_dec = cat.galaxies["dec"][best_idx]
-                best_zred = cat.galaxies["z_best_mean"][best_idx]
-                best_zred_std = cat.galaxies["z_best_std"][best_idx]
-
-                second_best_objid = np.int64(cat.galaxies["objID"][second_best_idx])
-                second_best_prob = cat.galaxies["total_prob"][second_best_idx]
-                #second_best_ra = cat.galaxies["ra"][second_best_idx]
-                #second_best_dec = cat.galaxies["dec"][second_best_idx]
-
-                best_cat = cat_name
-                query_time = cat.query_time
-                smallcone_prob = transient.smallcone_prob
-                missedcat_prob = transient.missedcat_prob
-                bayes_factor= best_prob/second_best_prob
-                
-                best_host_all_cat.append([SN_obj.name,best_prob,best_ra,best_dec,best_zred,best_zred_std,best_cat,
-                                          smallcone_prob,missedcat_prob,bayes_factor])
-
-                print(best_host_all_cat)
-
-                if verbose > 0:
-                    print(
-                        f"Chosen {cat_name} galaxy has catalog ID of {best_objid}"
-                        f" and RA, DEC = {best_ra:.6f}, {best_dec:.6f}"
+                log_host_properties(logger, transient.name, cat, best_idx, 
+                                    Fore.BLUE+f"\nProperties of best host (in {cat_name} {cat_release})", print_props, calc_host_props,
+                                    condition_props)
+              
+                # Set additional metadata
+                result.update({
+                    "host_ra": cat.galaxies['ra'][best_idx],
+                    "host_dec": cat.galaxies['dec'][best_idx],
+                    "host_redshift_mean": cat.galaxies['redshift_mean'][best_idx],
+                    "host_redshift_std": cat.galaxies['redshift_std'][best_idx],
+                    "host_prob": cat.galaxies['total_posterior'][best_idx],
+                    "best_cat": cat_name,
+                    "best_cat_release": cat_release,
+                    "smallcone_posterior": transient.smallcone_posterior,
+                    "missedcat_posterior": transient.missedcat_posterior,
+                })
+            
+                logger.info(
+                        f"Chosen galaxy has RA, DEC = {result['host_ra']:.6f}, {result['host_dec']:.6f}"
                     )
-                    #print(SN_obj.name,best_prob,best_ra,best_dec,best_zred,best_zred_std,best_cat,
-                    #       smallcone_prob,missedcat_prob,bayes_factor)
-                if verbose > 1:
-                    try:
-                        plot_match(
-                            [best_ra],
-                            [best_dec],
-                            cat.galaxies["z_best_mean"][best_idx],
-                            cat.galaxies["z_best_std"][best_idx],
-                            transient.position.ra.deg,
-                            transient.position.dec.deg,
-                            transient.name,
-                            transient.redshift,
-                            0,
-                            f"{transient.name}_{cat_name}",
-                        )
-                    except HTTPError:
-                        print("Couldn't get an image. Waiting 60s before moving on.")
-                        time.sleep(60)
-                        continue
 
-    if (transient.best_host == -1) and (verbose > 0):
-        print('No host found!')
+    if transient.best_host == -1:
+        logger.info("No good host found!")
 
-        
-
-    best_host_all_cat = np.array(best_host_all_cat)
-
-    # We return the most likely host from all the catalogs queried
-    best = best_host_all_cat[np.where(np.float64(best_host_all_cat[:,1]) == np.max(np.float64(best_host_all_cat[:,1])))][0]
-    
-    return (
-        best[0],
-        np.float64(best[1]),
-        np.float64(best[2]),
-        np.float64(best[3]),
-        np.float64(best[4]),
-        np.float64(best[5]),
-        best[6],
-        np.float64(best[7]),
-        np.float64(best[8]),
-        np.float64(best[9]),
-            )
+    return result
 
 
 
-def run_prost(transient, output_dir):
+
+def run_prost(transient, output_dir, save=False):
     """
     Runs PROST to find the host galaxy of a transient.
 
     Parameters:
         transient (Transient): The transient object containing coordinates.
-        output_dir (str): Directory to save GHOST output.
+        output_dir (str): Directory to save PROST output.
+        save (bool): Whether to save PROST data to output_dir
 
     Returns:
         list: A list of host galaxy associations from GHOST.
     """
     # Prost redshift, offset, and Absolute Mag Priors and Likelihoods
-    priorfunc_z =  uniform(loc=0.0001, scale=0.6)
-    priorfunc_offset = uniform(loc=0, scale=10) # go back to 10
-    priorfunc_absmag = uniform(loc=-30, scale=20)
 
-    likefunc_offset = gamma(a=0.75)
-    likefunc_absmag = uniform(loc=-30, scale=20) #SnRateAbsmag(a=-25, b=20)
+    if transient.transient_redshift == None:
+        # No redshift prior
+        priorfunc_offset = uniform(loc=0, scale=10) # go back to 10
+        priorfunc_absmag = uniform(loc=-30, scale=20)
+    
+        likefunc_offset = gamma(a=0.75)
+        likefunc_absmag = uniform(loc=-30, scale=20) #SnRateAbsmag(a=-25, b=20)
+    
+        priors = {"offset": priorfunc_offset, "absmag": priorfunc_absmag}
+        likes = {"offset": likefunc_offset, "absmag": likefunc_absmag}
 
-    priors = {"offset": priorfunc_offset, "absmag": priorfunc_absmag, "z": priorfunc_z}
-    likes = {"offset": likefunc_offset, "absmag": likefunc_absmag}
+    else:
+        priorfunc_z =  uniform(loc=0.0001, scale=0.6)
+        priorfunc_offset = uniform(loc=0, scale=10) 
+        priorfunc_absmag = uniform(loc=-30, scale=20)
+    
+        likefunc_offset = gamma(a=0.75)
+        likefunc_absmag = uniform(loc=-30, scale=20) 
+    
+        priors = {"offset": priorfunc_offset, "absmag": priorfunc_absmag, "z": priorfunc_z}
+        likes = {"offset": likefunc_offset, "absmag": likefunc_absmag}
     
 
-    # Run Prost to get host associations
     hosts = ProstSingleTransient(
         SN_obj=transient,
+        glade_catalog=pd.read_csv(f'{PROST_ROOT}/GLADE+_HyperLedaSizes_mod_withz.csv.gz'),
         n_samples=1000,
-        verbose=1,
         priors=priors,
         likes=likes,
         cosmo=cosmo,
-        catalogs=["decals", "panstarrs"],
+        catalogs={'panstarrs': 'dr2',
+                  'glade': 'latest',
+                  'decals': 'dr10',               
+                 } 
     )
 
+    
+
     # Ensure output directory exists
-    os.makedirs(output_dir, exist_ok=True)
     
-    # Save the host associations to a CSV file
-    now = datetime.now()
-    date_str = f"{now.year}{now.month:02d}{now.day:02d}"
-    output_csv = os.path.join(output_dir, f"hosts_{date_str}.csv")
+    if save:
+        os.makedirs(output_dir, exist_ok=True)
     
-    if os.path.exists(output_csv):
-        with open(output_csv, "a", newline='') as f:
-            writer = csv.writer(f, delimiter=',')
-            writer.writerows(zip([hosts[0]], [hosts[2]], [hosts[3]], [hosts[4]], 
-                                 [hosts[5]], [hosts[1]], [hosts[7]], [hosts[8]],[hosts[9]],[hosts[6]]))
+        # Save the host associations to a CSV file
+        now = datetime.now()
+        date_str = f"{now.year}{now.month:02d}{now.day:02d}"
+        output_csv = os.path.join(output_dir, f"hosts_{date_str}.csv")
+    
+        if os.path.exists(output_csv):
+            with open(output_csv, "a", newline='') as f:
+                writer = csv.writer(f, delimiter=',')
+                writer.writerows(zip([hosts['name']], [hosts['host_ra']], [hosts['host_dec']], [hosts['host_redshift_mean']],
+                                     [hosts['host_redshift_std']], [hosts['host_prob']], [hosts['smallcone_posterior']],
+                                     [hosts['missedcat_posterior']], [hosts['best_cat']], [hosts['best_cat_release']]))
+    
         
 
-    else:
-        # Create new file
-        with open(output_csv, "w") as f:
-            writer = csv.writer(f, delimiter=',')
-            writer.writerow(["Name","RA","Dec","z_mean","z_std","host_prob","smallcone_prob","missedcat_prob","bayes","best_cat"])    
-            writer.writerows(zip([hosts[0]], [hosts[2]], [hosts[3]], [hosts[4]], 
-                                 [hosts[5]], [hosts[1]], [hosts[7]], [hosts[8]],[hosts[9]],[hosts[6]]))
+        else:
+            # Create new file
+            with open(output_csv, "w") as f:
+                writer = csv.writer(f, delimiter=',')
+                writer.writerow(["Name","RA","Dec","z_mean","z_std","host_prob","smallcone_prob","missedcat_prob","best_cat", "best_cat_DR"])    
+                writer.writerows(zip([hosts['name']], [hosts['host_ra']], [hosts['host_dec']], [hosts['host_redshift_mean']],
+                                     [hosts['host_redshift_std']], [hosts['host_prob']], [hosts['smallcone_posterior']],
+                                     [hosts['missedcat_posterior']], [hosts['best_cat']], [hosts['best_cat_release']]))
     
 
     return hosts
