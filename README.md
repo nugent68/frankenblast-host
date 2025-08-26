@@ -30,8 +30,9 @@ FrankenBlast requires **Python 3.10.15**.
 
 2. Create the environment:
    ```bash
-   conda create --name frankenblast --file requirements.txt
+   conda create --name frankenblast python=3.10
    conda activate frankenblast
+   pip install -r requirements.txt
    ```
 
 3. Add custom paths from `settings.sh` to your shell configuration file (`.zshrc`, `.bashrc`, or `.bash_profile`).
