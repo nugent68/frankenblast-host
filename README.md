@@ -3,16 +3,6 @@
 [![Python](https://img.shields.io/badge/python-3.10.15-blue.svg)](https://www.python.org/downloads/release/python-31015/)  
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.xxxxxxx.svg)](https://doi.org/10.5281/zenodo.xxxxxxx)
 
-<<<<<<< Updated upstream
-For installation: 
-  - requirements.txt has the exact conda environment setup needed for FrankenBlast
-  - settings.sh has some CUSTOM path files you need to put in your .zshrc or .bashrc or .bash_profile file
-  - FrankenBlast currently uses Python 3.10.15
-  - Make sure you pip or conda install: numpy, scipy, astro-prospector, python-fsps (and FSPS), sedpy, astro-prost, astroquery, corner, dustmaps, extinction, jupyter, pandas, sbi, seaborn, tensorflow, and matplotlib
- 
-
-The SBI++ trained models for the host SED fit are too large for GitHub, please go to [INSERT ZENODO LINK, TEMPORARY FILE ACCESS: https://drive.google.com/drive/folders/1AxmboHdbNvwAtNvTuHK0C38vPQ0SKQQN?usp=sharing] to download sbipp_phot.zip and sbi_training_sets.zip. Move these files to the ./data/ directory and unzip. 
-=======
 Code for **rapid transient host association**, **photometry**, and **stellar population modeling**.
 
 ---
@@ -83,7 +73,7 @@ Place these in the `./data/` directory and unzip.
 
 ## 🛠️ Known Issues
 
-We are currently experiencing issues with the **astro_prost PanSTARRS host association**.  
+We are currently experiencing issues with the **astro_prost** PanSTARRS host association.  
 
 ### Workarounds:
 1. **Edit `astro_prost`**  
