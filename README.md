@@ -5,9 +5,6 @@
 
 Code for **rapid transient host association**, **photometry**, and **stellar population modeling**.
 
----
->>>>>>> Stashed changes
-
 ## 📖 Citation
 If you use **FrankenBlast**, please cite:
 
