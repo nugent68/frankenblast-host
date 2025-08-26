@@ -65,7 +65,7 @@ Place these in the `./data/` directory and unzip.
 ## 📓 Tutorials
 
 - **[FrankenBlast Tutorial.ipynb](./FrankenBlast%20Tutorial.ipynb)** — step-by-step guide to using FrankenBlast.  
-- SBI++ host SED fitting with LSST data — *tutorial coming soon*.
+- SBI++ host SED fitting with LSST data — *tutorial coming soon*, although all trained models are currently available.
 
 ---
 
