@@ -142,7 +142,6 @@ def gauss_approx_missingband(obs, run_params, sbi_params, max_neighbors=10):
     use_res = True
     while _chi2_thres <= run_params["max_chi2"]:
         idx_chi2_selected = np.where(chi2_nei <= _chi2_thres)[0]
-        print(_chi2_thres)
         if len(idx_chi2_selected) >= 10:
             break
         else:
@@ -586,9 +585,6 @@ def sbi_missing_and_noisy(obs, run_params, sbi_params):
     not_valid_idx_unc = not_valid_idx + nbands
 
 
-    print('Noisy idx:', noisy_idx)
-    print('Noisy original vals:', y_obs[noisy_idx])
-    print('Missing idx', not_valid_idx)
 
     # ------------------------------------------------
     kdes, use_res_missing, idx_chi2_selected = gauss_approx_missingband(
