@@ -51,8 +51,7 @@ corner, dustmaps, extinction, jupyter, pandas, sbi, seaborn, tensorflow, matplot
 The **SBI++ trained models** for host SED fitting are too large for GitHub.  
 Please download them from:
 
-- **Temporary access**: [Google Drive](https://drive.google.com/drive/folders/1AxmboHdbNvwAtNvTuHK0C38vPQ0SKQQN?usp=sharing)  
-- **Permanent access**: [Zenodo link — coming soon](https://doi.org/10.5281/zenodo.xxxxxxx)
+[Zenodo link — coming soon](https://doi.org/10.5281/zenodo.xxxxxxx)
 
 Files to download:
 - `sbipp_phot.zip`
