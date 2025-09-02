@@ -5,6 +5,9 @@
 
 Code for **rapid transient host association**, **photometry**, and **stellar population modeling**.
 
+**FRANKENBLAST IS IN ALPHA TESTING UNTIL THE PAPER IS SUBMITTED**
+thank you for your patience!
+
 ## 📖 Citation
 If you use **FrankenBlast**, please cite:
 
