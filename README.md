@@ -24,7 +24,7 @@ FrankenBlast requires **Python 3.10.15**.
 ### Setup
 1. Clone the repository:
    ```bash
-   git clone https://github.com/YOUR-USERNAME/frankenblast-host.git
+   git clone https://github.com/frankenblast-host.git
    cd frankenblast-host
    ```
 
