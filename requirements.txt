@@ -16,7 +16,7 @@ astro-prost==1.2.12
 astro-sedpy==0.4.0
 astropy==5.3.4
 astropy-iers-data==0.2025.8.18.0.40.14
-astroquery==0.4.10
+astroquery==0.4.7
 asttokens==3.0.0
 astunparse==1.6.3
 async-lru==2.0.4
