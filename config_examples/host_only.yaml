@@ -1,0 +1,20 @@
+# FrankenBlast Host Association Only Configuration
+# Use this when you only want to find the host galaxy
+
+# Transient information
+name: "SN2020abc"
+ra: 150.123
+dec: 2.456
+# redshift: 0.03  # Optional
+
+# Host association settings
+prost_samples: 1000
+prost_catalogs:
+  - "glade"
+  - "decals"
+save_prost: true
+prost_output_dir: "prostdb"
+
+# Logging
+verbose: false
+log_file: "host_association.log"

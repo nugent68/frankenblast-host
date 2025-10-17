@@ -1,0 +1,42 @@
+# FrankenBlast Full Pipeline Configuration
+# Example configuration for running the complete pipeline
+
+# Transient information
+name: "SN2019ulo"
+ra: 20.509
+dec: -60.571
+# redshift: 0.05  # Optional, uncomment if known
+
+# Host association settings
+prost_samples: 1000
+prost_catalogs:
+  - "glade"
+  - "decals"
+  # - "panstarrs"  # Currently has issues, uncomment when fixed
+save_prost: true
+prost_output_dir: "prostdb"
+
+# Photometry settings
+aperture_type: "global"  # or "local"
+fwhm_correction: true
+show_plots: false
+photometry_output: "photometry_results.json"
+
+# Cutout download settings
+surveys:
+  - "PanSTARRS"
+  - "DES"
+  - "WISE"
+  - "2MASS"
+  - "GALEX"
+size: 120.0  # arcseconds
+
+# SED fitting settings
+use_sbipp: true  # Use SBI++ for faster fitting
+sbi_model: "zfree_GPD2W"  # or "zfix_GPD2W" if redshift is known
+sed_mode: "test"  # or "production" for final results
+sed_output_dir: "data/sed_output"
+
+# Logging
+verbose: true
+log_file: "frankenblast_run.log"
